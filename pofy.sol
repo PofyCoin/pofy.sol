@@ -1,5 +1,26 @@
 /**
- *Submitted for verification at BscScan.com on 2021-05-16
+ *Submitted for verification at BscScan.com on 2021-06-05
+*/
+
+/**
+    POFY Coin
+   
+    DeFi Protocol for the Magic Cat on Binance Smart Chain.
+    
+    Official Website       : https://pofy.net
+    Official Telegram      : https://t.me/PofyCoin
+    Official Twitter       : https://twitter.com/PofyCoin
+
+    MAIN FEATURES:
+    
+    Auto-Liquidity          : 5% of each transaction is automatically injected into the liquidity pool, giving POFY protocol the fuel for continuous bullish momentum and raising of the price floor.
+    Redistribution          : 3% of each transaction is redistributed amongst all POFY hodlers proportionally. Watch your balance rise by the minute without even lifting your finger.
+    Anti-Whale              : A maximum buy per transaction of 1% of total supply protects against volatile price shocks and works as an anti-whale mechanism stopping whales and bots sniping large percentage of supply.
+    
+    Fair launch and there are no team tokens. Luckily, no manipulation, no whales. Just the sound of a growing community.
+    
+    TOKENOMICS:
+    Total Supply           : 1,000,000,000,000,000 (Quadrillion)
 */
 
 pragma solidity ^0.6.12;
@@ -398,8 +419,6 @@ contract Ownable is Context {
     address private _owner;
     address private _previousOwner;
     uint256 private _lockTime;
-    
-    bool private safefactorytonewowner = false;
 
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
@@ -448,15 +467,26 @@ contract Ownable is Context {
         emit OwnershipTransferred(_owner, newOwner);
         _owner = newOwner;
     }
-    
-    function transferOwnershipFromSafeFactory(address newOwner) internal virtual {
-        require(!safefactorytonewowner, "Contract owner has already been transfered from SafeFactory to the new Owner");
-        safefactorytonewowner = true;
-        require(newOwner != address(0), "Ownable: new owner is the zero address");
-        emit OwnershipTransferred(_owner, newOwner);
-        _owner = newOwner;
+
+    function geUnlockTime() public view returns (uint256) {
+        return _lockTime;
     }
 
+    //Locks the contract for owner for the amount of time provided
+    function lock(uint256 time) public virtual onlyOwner {
+        _previousOwner = _owner;
+        _owner = address(0);
+        _lockTime = now + time;
+        emit OwnershipTransferred(_owner, address(0));
+    }
+    
+    //Unlocks the contract for owner when _lockTime is exceeds
+    function unlock() public virtual {
+        require(_previousOwner == msg.sender, "You don't have permission to unlock");
+        require(now > _lockTime , "Contract is locked until 7 days");
+        emit OwnershipTransferred(_owner, _previousOwner);
+        _owner = _previousOwner;
+    }
 }
 
 // pragma solidity >=0.5.0;
@@ -673,7 +703,7 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
 }
 
 
-contract SafeFactoryBep20 is Context, IERC20, Ownable {
+contract POFY is Context, IERC20, Ownable {
     using SafeMath for uint256;
     using Address for address;
 
@@ -687,41 +717,35 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
     address[] private _excluded;
    
     uint256 private constant MAX = ~uint256(0);
-                              
-                              
-    uint256 private _tTotal;
-    uint256 private _rTotal;
+    uint256 private _tTotal = 1000000000 * 10**6 * 10**8;
+    uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
 
-    string private _name;
-    string private _symbol;
-    uint8 private _decimals;
+    string private _name = "POFY Coin";
+    string private _symbol = "POFY";
+    uint8 private _decimals = 8;
     
-    uint256 public _taxFee;
-    uint256 private _previousTaxFee;
+    uint256 public _taxFee = 4;
+    uint256 private _previousTaxFee = _taxFee;
     
-    uint256 public _liquidityFee;
-    uint256 private _previousLiquidityFee;
+    uint256 public _liquidityFee = 5;
+    uint256 private _previousLiquidityFee = _liquidityFee;
 
-    IUniswapV2Router02 public uniswapV2Router;
-    address public uniswapV2Pair;
+    IUniswapV2Router02 public immutable uniswapV2Router;
+    address public immutable uniswapV2Pair;
     
     bool inSwapAndLiquify;
-    bool public swapAndLiquifyEnabled = false;
+    bool public swapAndLiquifyEnabled = true;
     
-    uint256 public _maxTxAmount;
-    // the min number of
-        // tokens that we need to initiate a swap + liquidity lock (normally 0.5% > 0.1% of total supply)
-    uint256 private numTokensSellToAddToLiquidity;
-    
-    bool private initialized;
+    uint256 public _maxTxAmount = 1000000000 * 10**6 * 10**8;
+    uint256 private numTokensSellToAddToLiquidity = 10000000 * 10**6 * 10**8;
     
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
     event SwapAndLiquifyEnabledUpdated(bool enabled);
     event SwapAndLiquify(
         uint256 tokensSwapped,
-        uint256 bnbReceived,
-        uint256 tokensIntoLiquidity
+        uint256 ethReceived,
+        uint256 tokensIntoLiqudity
     );
     
     modifier lockTheSwap {
@@ -730,31 +754,10 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         inSwapAndLiquify = false;
     }
     
-    // require(bytes(name).length == 0); // ensure not init'd already.
-    // require(bytes(_name).length > 0);
-    
-    function init(string memory name, string memory symbol, uint256 totalsupply, uint8 decimals, uint256 maxtxamount, uint256 taxFee, uint256 liquidityFee, uint256 numtokenstoselltoaddtoliquidity, address newContractOwner) public {
-        require(!initialized, "Contract instance has already been initialized");
-        initialized = true;
+    constructor () public {
+        _rOwned[_msgSender()] = _rTotal;
         
-        transferOwnershipFromSafeFactory(newContractOwner);
-        
-        _name = name;
-        _symbol = symbol;
-        _decimals = decimals;
-        uint256 decimalmulty = _decimals;
-        _tTotal = totalsupply * (10**decimalmulty);
-        _rTotal = (MAX - (MAX % _tTotal));
-        _maxTxAmount = maxtxamount * (10**decimalmulty);
-        numTokensSellToAddToLiquidity = numtokenstoselltoaddtoliquidity * (10**decimalmulty);
-        _taxFee = taxFee;
-        _previousTaxFee = _taxFee;
-        _liquidityFee = liquidityFee;
-        _previousLiquidityFee = _liquidityFee;
-        
-        _rOwned[newContractOwner] = _rTotal; 
-        
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x05fF2B0DB69458A0750badebc4f9e13aDd608C7F);
          // Create a uniswap pair for this new token
         uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
             .createPair(address(this), _uniswapV2Router.WETH());
@@ -766,22 +769,8 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
         
-        
-        
-        emit Transfer(address(0), newContractOwner, _tTotal);
+        emit Transfer(address(0), _msgSender(), _tTotal);
     }
-  
-
-
-    function getBNBBalance() public view returns(uint) {
-        return address(this).balance;
-    }
-
-    function withdrawOverFlowBNB() public onlyOwner {
-        address payable to = payable(msg.sender);
-        to.transfer(getBNBBalance());
-    }
-    
 
     function name() public view returns (string memory) {
         return _name;
@@ -842,6 +831,15 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         return _tFeeTotal;
     }
 
+    function deliver(uint256 tAmount) public {
+        address sender = _msgSender();
+        require(!_isExcluded[sender], "Excluded addresses cannot call this function");
+        (uint256 rAmount,,,,,) = _getValues(tAmount);
+        _rOwned[sender] = _rOwned[sender].sub(rAmount);
+        _rTotal = _rTotal.sub(rAmount);
+        _tFeeTotal = _tFeeTotal.add(tAmount);
+    }
+
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns(uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferFee) {
@@ -870,7 +868,7 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
     }
 
     function includeInReward(address account) external onlyOwner() {
-        require(_isExcluded[account], "Account is not excluded");
+        require(_isExcluded[account], "Account is already excluded");
         for (uint256 i = 0; i < _excluded.length; i++) {
             if (_excluded[i] == account) {
                 _excluded[i] = _excluded[_excluded.length - 1];
@@ -919,7 +917,7 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         emit SwapAndLiquifyEnabledUpdated(_enabled);
     }
     
-     //to receive BNB from pancakeswapV2Router when swapping
+     //to recieve ETH from uniswapV2Router when swaping
     receive() external payable {}
 
     function _reflectFee(uint256 rFee, uint256 tFee) private {
@@ -1063,16 +1061,16 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         uint256 half = contractTokenBalance.div(2);
         uint256 otherHalf = contractTokenBalance.sub(half);
 
-        // capture the contract's current BNB balance.
-        // this is so that we can capture exactly the amount of BNB that the
-        // swap creates, and not make the liquidity event include any BNB that
+        // capture the contract's current ETH balance.
+        // this is so that we can capture exactly the amount of ETH that the
+        // swap creates, and not make the liquidity event include any ETH that
         // has been manually sent to the contract
         uint256 initialBalance = address(this).balance;
 
-        // swap tokens for BNB
-        swapTokensForBnb(half); // <- this breaks the BNB -> TOKEN swap when swap+liquify is triggered
+        // swap tokens for ETH
+        swapTokensForEth(half); // <- this breaks the ETH -> HATE swap when swap+liquify is triggered
 
-        // how much BNB did we just swap into?
+        // how much ETH did we just swap into?
         uint256 newBalance = address(this).balance.sub(initialBalance);
 
         // add liquidity to uniswap
@@ -1081,8 +1079,8 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         emit SwapAndLiquify(half, newBalance, otherHalf);
     }
 
-    function swapTokensForBnb(uint256 tokenAmount) private {
-        // generate the uniswap pair path of token -> bnb
+    function swapTokensForEth(uint256 tokenAmount) private {
+        // generate the uniswap pair path of token -> weth
         address[] memory path = new address[](2);
         path[0] = address(this);
         path[1] = uniswapV2Router.WETH();
@@ -1092,24 +1090,24 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         // make the swap
         uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
             tokenAmount,
-            0, // accept any amount of BNB
+            0, // accept any amount of ETH
             path,
             address(this),
             block.timestamp
         );
     }
 
-    function addLiquidity(uint256 tokenAmount, uint256 bnbAmount) private {
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
         // approve token transfer to cover all possible scenarios
         _approve(address(this), address(uniswapV2Router), tokenAmount);
 
         // add the liquidity
-        uniswapV2Router.addLiquidityETH{value: bnbAmount}(
+        uniswapV2Router.addLiquidityETH{value: ethAmount}(
             address(this),
             tokenAmount,
             0, // slippage is unavoidable
             0, // slippage is unavoidable
-            address(this),
+            owner(),
             block.timestamp
         );
     }
@@ -1123,6 +1121,8 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
             _transferFromExcluded(sender, recipient, amount);
         } else if (!_isExcluded[sender] && _isExcluded[recipient]) {
             _transferToExcluded(sender, recipient, amount);
+        } else if (!_isExcluded[sender] && !_isExcluded[recipient]) {
+            _transferStandard(sender, recipient, amount);
         } else if (_isExcluded[sender] && _isExcluded[recipient]) {
             _transferBothExcluded(sender, recipient, amount);
         } else {
@@ -1161,4 +1161,5 @@ contract SafeFactoryBep20 is Context, IERC20, Ownable {
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
     }
+
 }
